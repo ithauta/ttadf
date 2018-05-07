@@ -1,0 +1,12 @@
+<mapping name="simple">
+
+    <core id="gpp_core_0">
+        <actor id="actor_readsample_0"/>
+        <actor id="actor_writesample_0"/>
+    </core>
+
+    <core id="a_core_1">
+        <actor id="actor_combfilter_0"/>
+    </core>
+
+</mapping>

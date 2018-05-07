@@ -1,0 +1,28 @@
+<system name="simple">
+
+    <core id="gpp_core_0">
+        <name>HOST_SOURCE_SINK</name>
+        <arch>X86</arch>
+        <logical-core>0</logical-core>
+        <clkf>200</clkf>
+        <connect>shared0</connect>
+    </core>
+
+    <core id="a_core_1">
+        <name>TTA_FILTER_0</name>
+        <arch>TTA</arch>
+        <deffile>adfs/custom_ext.adf</deffile>
+        <hwdef>adfs/custom_ext.idf</hwdef>
+        <clkf>200</clkf>
+        <cflags>-O3 --unroll-threshold=300 --inline-threshold=1000 --little-endian -D TTADF_ARCH_TTA -D TTADF_BENCHMARK  -llwpr </cflags>
+        <lsu-connect lsu="LSU_SHARED_0">shared0</lsu-connect>
+
+    </core>
+
+    <memory id="shared0">
+        <width>8</width>
+        <min-address>0</min-address>
+        <max-address>1023</max-address>
+    </memory>
+
+</system>

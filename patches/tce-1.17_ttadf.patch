@@ -1,0 +1,787 @@
+diff --git a/tce/src/applibs/LLVMBackend/LLVMTCEBuilder.cc b/tce/src/applibs/LLVMBackend/LLVMTCEBuilder.cc
+index 2b85c44..0a632bb 100644
+--- a/tce/src/applibs/LLVMBackend/LLVMTCEBuilder.cc
++++ b/tce/src/applibs/LLVMBackend/LLVMTCEBuilder.cc
+@@ -902,7 +902,7 @@ LLVMTCEBuilder::createExprDataDefinition(
+         unsigned dataAddr = 
+ #endif
+         createDataDefinition(addressSpaceId, addr, ce->getOperand(0));
+-        assert(dataAddr == addr);
++        //assert(dataAddr == addr);
+     } else if (opcode == Instruction::Add) {
+         assert(false && "NOT IMPLEMENTED");
+     } else if (opcode == Instruction::Sub) {
+diff --git a/tce/src/applibs/PIG/ProgramImageGenerator.cc b/tce/src/applibs/PIG/ProgramImageGenerator.cc
+index 82ad0fa..add1402 100644
+--- a/tce/src/applibs/PIG/ProgramImageGenerator.cc
++++ b/tce/src/applibs/PIG/ProgramImageGenerator.cc
+@@ -450,7 +450,15 @@ ProgramImageGenerator::generateDataImage(
+         // format(bit 0 == highest bit).
+         // Have to convert LE data into nasty mixed endian for
+         // initialization with those tools.
+-        while (lineOffset < dataBits.size()) {
++        
++        unsigned int endC = dataBits.size();
++        if (lineOffset + ((mausPerLine-1)*as->width()) > dataBits.size()) {
++                endC = ((dataBits.size() / (mausPerLine*as->width()))+1) *
++                (mausPerLine*as->width());
++        }
++               
++        
++        while (lineOffset < endC) {
+             // Pad to full line width
+             if (lineOffset + ((mausPerLine-1)*as->width()) > dataBits.size()) {
+                 unsigned int preferredSize =
+@@ -473,6 +481,7 @@ ProgramImageGenerator::generateDataImage(
+                 }
+             }
+             lineOffset += (mausPerLine*as->width());
++            
+         }
+     }
+ 
+diff --git a/tce/src/applibs/Simulator/DataflowSimulatorFrontend.cc b/tce/src/applibs/Simulator/DataflowSimulatorFrontend.cc
+new file mode 100644
+index 0000000..ef9f505
+--- /dev/null
++++ b/tce/src/applibs/Simulator/DataflowSimulatorFrontend.cc
+@@ -0,0 +1,220 @@
++/*
++    Copyright (c) 2002-2012 Tampere University of Technology.
++
++    This file is part of TTA-Based Codesign Environment (TCE).
++
++    Permission is hereby granted, free of charge, to any person obtaining a
++    copy of this software and associated documentation files (the "Software"),
++    to deal in the Software without restriction, including without limitation
++    the rights to use, copy, modify, merge, publish, distribute, sublicense,
++    and/or sell copies of the Software, and to permit persons to whom the
++    Software is furnished to do so, subject to the following conditions:
++
++    The above copyright notice and this permission notice shall be included in
++    all copies or substantial portions of the Software.
++
++    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
++    THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
++    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
++    DEALINGS IN THE SOFTWARE.
++ */
++/**
++ * @file DataflowSimulatorFrontend.cc
++ *
++ * Implementation of DataflowSimulatorFrontend class.
++ *
++ * @author Pekka J‰‰skel‰inen 2010,2012 (pjaaskel-no.spam-cs.tut.fi)
++ */
++#include "DataflowSimulatorFrontend.hh"
++#include "SimulatorFrontend.hh"
++#include "MachineState.hh"
++#include "DetailedOperationSimulator.hh"
++#include "Listener.hh"
++#include "SimulationEventHandler.hh"
++
++DataflowSimulatorFrontend::DataflowSimulatorFrontend(
++    TCEString machineFile, bool useCompiledSimulation) {
++    simFront_ = 
++        new SimulatorFrontend(
++            useCompiledSimulation ? 
++            SimulatorFrontend::SIM_COMPILED : 
++            SimulatorFrontend::SIM_DATAFLOW);
++    simFront_->setZeroFillMemoriesOnReset(false);
++    try {
++        simFront_->loadMachine(machineFile);
++    } catch (Exception& e) {
++        std::cerr 
++            << e.errorMessage() + " in " +   
++            e.fileName() + ":" +
++            e.procedureName() + ":" 
++            << e.lineNum() << std::endl;
++        abort();
++    }
++}
++
++DataflowSimulatorFrontend::DataflowSimulatorFrontend(
++    TCEString machineFile, TCEString programFile, 
++    bool useCompiledSimulation, bool useDetailedSimulation) {
++    simFront_ = 
++        new SimulatorFrontend(
++            useCompiledSimulation ? 
++            SimulatorFrontend::SIM_COMPILED : 
++            SimulatorFrontend::SIM_DATAFLOW);
++    simFront_->setZeroFillMemoriesOnReset(false);
++    simFront_->setDetailedSimulation(useDetailedSimulation);
++    try {
++        simFront_->loadMachine(machineFile);
++        simFront_->loadProgram(programFile);
++    } catch (Exception& e) {
++        std::cerr 
++            << e.errorMessage() + " in " +   
++            e.fileName() + ":" +
++            e.procedureName() + ":" 
++            << e.lineNum() << std::endl;
++        abort();
++    }
++}
++
++DataflowSimulatorFrontend::DataflowSimulatorFrontend(
++        const TTAMachine::Machine& machine, 
++        const TTAProgram::Program& program) {
++    simFront_ = new SimulatorFrontend(SimulatorFrontend::SIM_DATAFLOW);
++    simFront_->setZeroFillMemoriesOnReset(false);
++    try {
++        simFront_->loadMachine(machine);
++        simFront_->loadProgram(program);
++    } catch (Exception& e) {
++        std::cerr 
++            << e.errorMessage() + " in " +   
++            e.fileName() + ":" +
++            e.procedureName() + ":" 
++            << e.lineNum() << std::endl;
++        abort();
++    }
++
++}
++
++DataflowSimulatorFrontend::~DataflowSimulatorFrontend() {
++    delete simFront_;
++}
++
++void
++DataflowSimulatorFrontend::step() {
++    if (!simFront_->hasSimulationEnded())
++        simFront_->step();
++}
++
++void
++DataflowSimulatorFrontend::run() {
++    simFront_->run();
++}
++
++/**
++ * Stops the current simulation.
++ *
++ * This produces the same kind of stop as if the user pressed ctrl-c in 
++ * the ttasim.
++ */
++void
++DataflowSimulatorFrontend::stop() {
++    simFront_->prepareToStop(SRE_USER_REQUESTED);
++}
++
++void
++DataflowSimulatorFrontend::loadProgram(const std::string& fileName) {
++    simFront_->loadProgram(fileName);
++}
++
++/**
++ * Returns true in case the engine has the machine and the program
++ * loaded and is ready to execute, but has not been executed yet.
++ */
++bool
++DataflowSimulatorFrontend::isInitialized() const {
++    return simFront_->isSimulationInitialized();
++}
++
++/**
++ * Retruns true in case the engine has been initialized and is
++ * ready to be stepped.
++ */
++bool
++DataflowSimulatorFrontend::isStopped() const {
++    return simFront_->isSimulationStopped();
++}
++
++bool
++DataflowSimulatorFrontend::isRunning() const {
++    return simFront_->isSimulationRunning();
++}
++
++bool
++DataflowSimulatorFrontend::isFinished() const {
++    return simFront_->hasSimulationEnded();
++}
++
++bool
++DataflowSimulatorFrontend::hadRuntimeError() const {
++    return simFront_->stopReasonCount() >= 1 &&
++        simFront_->stopReason(0) == SRE_RUNTIME_ERROR;
++}
++
++const TTAMachine::Machine& 
++DataflowSimulatorFrontend::machine() const {
++    return simFront_->machine();
++}
++
++const TTAProgram::Program& 
++DataflowSimulatorFrontend::program() const {
++    return simFront_->program();
++}
++
++MemorySystem&
++DataflowSimulatorFrontend::memorySystem() {
++    return simFront_->memorySystem();
++}
++
++/**
++ * Replaces all operation executors in the given FU with the
++ * given one.
++ */
++void
++DataflowSimulatorFrontend::setOperationSimulator(
++    const TCEString& fuName, DetailedOperationSimulator& sim) {
++    try {
++        simFront_->machineState().fuState(fuName).
++            setOperationSimulator(sim);
++    } catch (Exception& e) {
++        std::cerr 
++            << e.errorMessage() + " in " +   
++            e.fileName() + ":" +
++            e.procedureName() + ":" 
++            << e.lineNum() << std::endl;
++        abort();
++    }
++}
++
++bool
++DataflowSimulatorFrontend::registerEventListener(int event, Listener* listener) {
++    return simFront_->eventHandler().registerListener(event, listener);
++}
++
++bool
++DataflowSimulatorFrontend::unregisterEventListener(
++    int event, Listener* listener) {
++    return simFront_->eventHandler().unregisterListener(event, listener);
++}
++
++uint64_t
++DataflowSimulatorFrontend::cycleCount() const {
++    return simFront_->cycleCount();
++}
++
++void
++DataflowSimulatorFrontend::initializeDataMemories(
++    const TTAMachine::AddressSpace* onlyOne) {
++    simFront_->initializeDataMemories(onlyOne);
++}
+diff --git a/tce/src/applibs/Simulator/DataflowSimulatorFrontend.hh b/tce/src/applibs/Simulator/DataflowSimulatorFrontend.hh
+new file mode 100644
+index 0000000..1b1662f
+--- /dev/null
++++ b/tce/src/applibs/Simulator/DataflowSimulatorFrontend.hh
+@@ -0,0 +1,102 @@
++/*
++    Copyright (c) 2002-2013 Tampere University of Technology.
++
++    This file is part of TTA-Based Codesign Environment (TCE).
++
++    Permission is hereby granted, free of charge, to any person obtaining a
++    copy of this software and associated documentation files (the "Software"),
++    to deal in the Software without restriction, including without limitation
++    the rights to use, copy, modify, merge, publish, distribute, sublicense,
++    and/or sell copies of the Software, and to permit persons to whom the
++    Software is furnished to do so, subject to the following conditions:
++
++    The above copyright notice and this permission notice shall be included in
++    all copies or substantial portions of the Software.
++
++    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
++    THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
++    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
++    DEALINGS IN THE SOFTWARE.
++ */
++/**
++ * @file DataflowSimulatorFrontend.hh
++ *
++ * Declaration of DataflowSimulatorFrontend class.
++ *
++ * @author Pekka J‰‰skel‰inen 2010-2013 (pjaaskel-no.spam-cs.tut.fi)
++ * @note rating: red
++ */
++
++#ifndef TTA_DATAFLOW_SIMULATOR_FRONTEND
++#define TTA_DATAFLOW_SIMULATOR_FRONTEND
++
++#include <stdint.h>
++
++#include "TCEString.hh"
++
++class SimulatorFrontend;
++class OperationExecutor;
++class DetailedOperationSimulator;
++class MemorySystem;
++class Listener;
++namespace TTAMachine {
++    class Machine;
++    class AddressSpace;
++}
++
++namespace TTAProgram {
++    class Program;
++}
++/**
++ * Simplified simulator frontend e.g. for calling from system level simulators
++ * without needing to include the huge SimulatorFrontend.hh with lots of
++ * include deps.
++ */
++class DataflowSimulatorFrontend {
++public:
++    DataflowSimulatorFrontend(TCEString machineFile, bool useCompiledSimulation=false);
++    DataflowSimulatorFrontend(
++        TCEString machineFile, TCEString programFile, 
++        bool useCompiledSimulation=false,
++        bool useDetailedSimulation=false);
++    DataflowSimulatorFrontend(
++        const TTAMachine::Machine& machine, 
++        const TTAProgram::Program& program);
++
++    virtual ~DataflowSimulatorFrontend();
++
++    void step();
++    void run();
++    void stop();
++
++    uint64_t cycleCount() const;
++
++    bool isInitialized() const;
++    bool isStopped() const;
++    bool isRunning() const;
++    bool isFinished() const;
++    bool hadRuntimeError() const;
++
++    virtual void setOperationSimulator(
++        const TCEString& fuName, DetailedOperationSimulator& sim);
++
++    MemorySystem& memorySystem();
++    void initializeDataMemories(const TTAMachine::AddressSpace* onlyOne=NULL);
++
++    void loadProgram(const std::string& fileName);
++    const TTAMachine::Machine& machine() const;
++    const TTAProgram::Program& program() const;
++
++    SimulatorFrontend& frontend() { return *simFront_; }
++
++    virtual bool registerEventListener(int event, Listener* listener);
++    virtual bool unregisterEventListener(int event, Listener* listener);
++
++private:
++    SimulatorFrontend* simFront_;
++};
++
++#endif
+diff --git a/tce/src/applibs/Simulator/Makefile.am b/tce/src/applibs/Simulator/Makefile.am
+index e01492c..08fcf9b 100644
+--- a/tce/src/applibs/Simulator/Makefile.am
++++ b/tce/src/applibs/Simulator/Makefile.am
+@@ -40,6 +40,7 @@ libsimulator_la_SOURCES = WritableState.cc ReadableState.cc StateData.cc \
+ 	CompiledSimMove.cc CompiledSimInterpreter.cc CompiledSimSettingCommand.cc \
+ 	CompiledSimulationPimpl.cc FSAFUResourceConflictDetectorPimpl.cc \
+ 	OperationIDIndex.cc CompiledSimUtilizationStats.cc \
++	DataflowSimulatorFrontend.cc\
+ 	SimpleSimulatorFrontend.cc ExecutingOperation.cc SimulatorCLI.cc \
+ 	SimulatorCmdLineOptions.cc \
+ 	RemoteController.cc CustomDBGController.cc TCEDBGController.cc
+@@ -53,7 +54,8 @@ include_HEADERS = \
+ 
+ # Headers required by the SystemC wrapper.
+ include_HEADERS += SimpleSimulatorFrontend.hh DetailedOperationSimulator.hh \
+-	ExecutingOperation.hh SimulationEventHandler.hh
++	ExecutingOperation.hh SimulationEventHandler.hh \
++	DataflowSimulatorFrontend.hh
+ 
+ PROJECT_ROOT = $(top_srcdir)
+ SRC_ROOT_DIR = ${PROJECT_ROOT}/src
+@@ -166,5 +168,6 @@ libsimulator_la_SOURCES += \
+ 	SettingCommand.icc CompiledSimulation.icc \
+ 	GCUState.icc DCMFUResourceConflictDetector.icc \
+ 	ExecutableInstruction.icc MachineState.icc \
+-	AssignmentQueue.icc 
++	AssignmentQueue.icc \
++	DataflowSimulatorFrontend.hh
+ ## headers end
+diff --git a/tce/src/applibs/Simulator/MemorySystem.cc b/tce/src/applibs/Simulator/MemorySystem.cc
+index 9a2b1ea..7da7a96 100644
+--- a/tce/src/applibs/Simulator/MemorySystem.cc
++++ b/tce/src/applibs/Simulator/MemorySystem.cc
+@@ -157,6 +157,40 @@ MemorySystem::shareMemoriesWith(MemorySystem& other) {
+     }
+ }
+ 
++void
++MemorySystem::shareMemoryWith(MemorySystem& other, const string& asname){
++    std::size_t i;
++    
++    for ( i = 0; i < other.memoryCount(); ++i) {
++        const AddressSpace& as = other.addressSpace(i);
++        if (as.name() == asname) break;
++    }
++    
++    Machine::AddressSpaceNavigator nav = machine_->addressSpaceNavigator();
++    AddressSpace* thisAS = nav.item(asname);
++    /// remove the replaced memory as it should not be controlled
++    /// by this MemorySystem anymore
++    
++
++    memoryList_.erase(
++        std::find(
++            memoryList_.begin(), memoryList_.end(), 
++            memories_[thisAS]));
++
++
++    sharedMemories_.erase(
++        std::find(
++            sharedMemories_.begin(), sharedMemories_.end(),
++            memories_[thisAS]));
++
++    replacedSharedMemories_.push_back(memories_[thisAS]);
++           
++
++    memories_[thisAS] = other.memory(i);
++
++}
++
++
+ /**
+  * Returns Memory instance bound to the given AddressSpace.
+  *
+diff --git a/tce/src/applibs/Simulator/MemorySystem.hh b/tce/src/applibs/Simulator/MemorySystem.hh
+index 320c79d..719f777 100644
+--- a/tce/src/applibs/Simulator/MemorySystem.hh
++++ b/tce/src/applibs/Simulator/MemorySystem.hh
+@@ -82,6 +82,7 @@ public:
+         throw (InstanceNotFound);
+ 
+     void shareMemoriesWith(MemorySystem& other);
++    void shareMemoryWith(MemorySystem& other, const std::string& asname);
+ 
+     void advanceClockOfLocalMemories();
+     void advanceClockOfSharedMemories();
+diff --git a/tce/src/applibs/Simulator/SimulatorFrontend.cc b/tce/src/applibs/Simulator/SimulatorFrontend.cc
+index 11d691d..f99ddb7 100644
+--- a/tce/src/applibs/Simulator/SimulatorFrontend.cc
++++ b/tce/src/applibs/Simulator/SimulatorFrontend.cc
+@@ -102,6 +102,7 @@ POP_CLANG_DIAGS
+ #include "SimulationEventHandler.hh"
+ #include "MachineInfo.hh"
+ #include "DirectAccessMemory.hh"
++#include "IdealSRAM_DF.hh"
+ #include "IdealSRAM.hh"
+ #include "RemoteMemory.hh"
+ #include "MemoryProxy.hh"
+@@ -1725,6 +1726,11 @@ SimulatorFrontend::initializeMemorySystem() {
+                  new IdealSRAM(
+                     space.start(), space.end(), space.width(), machine.isLittleEndian()));
+              break;
++        case SIM_DATAFLOW:
++	         mem = MemorySystem::MemoryPtr(
++                 new IdealSRAM_DF(
++                    space.start(), space.end(), space.width(), machine.isLittleEndian()));
++             break;
+         case SIM_REMOTE:
+         case SIM_CUSTOM:
+              mem = MemorySystem::MemoryPtr(
+diff --git a/tce/src/applibs/Simulator/SimulatorFrontend.hh b/tce/src/applibs/Simulator/SimulatorFrontend.hh
+index 0cab547..690e971 100644
+--- a/tce/src/applibs/Simulator/SimulatorFrontend.hh
++++ b/tce/src/applibs/Simulator/SimulatorFrontend.hh
+@@ -101,7 +101,8 @@ public:
+         SIM_NORMAL,   ///< Default, interpreted simulation (debugging engine).
+         SIM_COMPILED, ///< Compiled, faster simulation.
+         SIM_REMOTE,   ///< Remote debugger, not a simulator at all
+-        SIM_CUSTOM    ///< User-implemented remote HW debugger
++        SIM_CUSTOM,   ///< User-implemented remote HW debugger
++        SIM_DATAFLOW
+     } SimulationType;
+ 
+     SimulatorFrontend(SimulationType backend = SIM_NORMAL);
+diff --git a/tce/src/base/memory/IdealSRAM_DF.cc b/tce/src/base/memory/IdealSRAM_DF.cc
+new file mode 100644
+index 0000000..be970ba
+--- /dev/null
++++ b/tce/src/base/memory/IdealSRAM_DF.cc
+@@ -0,0 +1,131 @@
++/*
++    Copyright (c) 2002-2009 Tampere University of Technology.
++
++    This file is part of TTA-Based Codesign Environment (TCE).
++
++    Permission is hereby granted, free of charge, to any person obtaining a
++    copy of this software and associated documentation files (the "Software"),
++    to deal in the Software without restriction, including without limitation
++    the rights to use, copy, modify, merge, publish, distribute, sublicense,
++    and/or sell copies of the Software, and to permit persons to whom the
++    Software is furnished to do so, subject to the following conditions:
++
++    The above copyright notice and this permission notice shall be included in
++    all copies or substantial portions of the Software.
++
++    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
++    THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
++    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
++    DEALINGS IN THE SOFTWARE.
++ */
++/**
++ * @file IdealSRAM_DF.cc
++ *
++ * Definition of IdealSRAM_DF class.
++ *
++ * @author Jussi Nyk√§nen 2004 (nykanen-no.spam-cs.tut.fi)
++ * @author Pekka J√§√§skel√§inen 2005 (pjaaskel-no.spam-cs.tut.fi)
++ * @note rating: red
++ */
++
++#include <string>
++#include <utility>
++
++#include "IdealSRAM_DF.hh"
++#include "MemoryContents.hh"
++#include "Conversion.hh"
++#include "Application.hh"
++
++using std::string;
++
++
++/**
++ * Constructor. Create a model for a given memory.
++ *
++ * The created memory model is empty. No data is allocated for its contents.
++ *
++ * @param start First address of the memory.
++ * @param end Last address of the memory.
++ * @param MAUSize Bit width of the minimum addressable unit of the memory.
++ * @param wordSize Number of MAUs that make up a natural word.
++ * @param align Alignment of natural words, expressed in number of MAUs.
++ */
++IdealSRAM_DF::IdealSRAM_DF(Word start, Word end, Word MAUSize, bool littleEndian) :
++    Memory(start, end, MAUSize, littleEndian), start_(start), end_(end), 
++    MAUSize_(MAUSize) {
++    //data_ = new MemoryContents(end_ - start_);
++    data_ = new Memory::MAU [end_/4 - start_];
++}
++
++
++/**
++ * Destructor.
++ *
++ * The storage reserved for the memory contents is deallocated. Any data
++ * about pending access requests is freed, too.
++ */
++IdealSRAM_DF::~IdealSRAM_DF() {
++    delete data_;
++    data_ = NULL;
++}
++
++/**
++ * Writes a single memory location.
++ *
++ * The fastest way to write to the memory.
++ *
++ * @param address The target address.
++ * @param data The data to write.
++ */
++void
++IdealSRAM_DF::write(Word address, MAU data) {
++    //data_->writeData(address - start_, data);
++     unsigned char *data_p = (unsigned char *) (&data_[(address>>2) - start_]);
++     data_p += (address & 0x00000003);
++     *(data_p) = (unsigned char) (data & 0x000000ff);
++}
++
++/**
++ * Reads a single memory location.
++ *
++ * The fastest way to read the memory.
++ *
++ * @param address The address to read.
++ * @return The data read.
++ */
++Memory::MAU
++IdealSRAM_DF::read(Word address) {
++    unsigned char *data_p = (unsigned char *)(&data_[(address>>2) - start_]);
++    data_p += (address & 0x00000003);
++
++    return (Memory::MAU) (*data_p);
++}
++
++/**
++ * Fills the whole memory with zeros.
++ *
++ * This is needed due to some buggy simulated programs which expect
++ * uninitialized data to be zero.
++ */
++void
++IdealSRAM_DF::fillWithZeros() {
++    memset(data_,0, sizeof(Memory::MAU )*(end_ - start_));
++}
++
++
++Memory::MAU *
++IdealSRAM_DF::getStoragePointer(){
++    return data_;
++}
++
++void 
++IdealSRAM_DF::setStoragePointer(char *p_storage){
++
++    delete[] data_;
++    data_ = (Memory::MAU *) p_storage;
++
++}
++
+diff --git a/tce/src/base/memory/IdealSRAM_DF.hh b/tce/src/base/memory/IdealSRAM_DF.hh
+new file mode 100644
+index 0000000..90b5176
+--- /dev/null
++++ b/tce/src/base/memory/IdealSRAM_DF.hh
+@@ -0,0 +1,87 @@
++/*
++    Copyright (c) 2002-2009 Tampere University of Technology.
++
++    This file is part of TTA-Based Codesign Environment (TCE).
++
++    Permission is hereby granted, free of charge, to any person obtaining a
++    copy of this software and associated documentation files (the "Software"),
++    to deal in the Software without restriction, including without limitation
++    the rights to use, copy, modify, merge, publish, distribute, sublicense,
++    and/or sell copies of the Software, and to permit persons to whom the
++    Software is furnished to do so, subject to the following conditions:
++
++    The above copyright notice and this permission notice shall be included in
++    all copies or substantial portions of the Software.
++
++    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
++    THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
++    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
++    DEALINGS IN THE SOFTWARE.
++ */
++/**
++ * @file IdealSRAM_DF.hh
++ *
++ * Declaration of IdealSRAM_DF class.
++ *
++ * @author Jussi Nyk‰nen 2004 (nykanen-no.spam-cs.tut.fi)
++ * @note rating: red
++ */
++
++#ifndef TTA_IDEAL_SRAM_DF_HH
++#define TTA_IDEAL_SRAM_DF_HH
++
++#include <vector>
++#include <map>
++
++#include "Memory.hh"
++
++class MemoryContents;
++
++/**
++ * Class that models an "ideal" memory.
++ *
++ * An ideal memory is defined as a memory with read latency zero. 
++ * The data is available at the same cycle in which the load is initiated. 
++ * Also, after a store is initiated, data is written into memory as soon as
++ * the clock advances.
++ *
++ * This implementation uses a "paged array" as the storage structure which
++ * avoids unnecessary allocation while providing O(1) access time. See
++ * PagedArray for more details.
++ */
++class IdealSRAM_DF : public Memory {
++public:
++    IdealSRAM_DF(Word start, Word end, Word MAUSize, bool littleEndian);
++    virtual ~IdealSRAM_DF();
++
++    virtual void write(Word address, MAU data);
++    virtual Memory::MAU read(Word address);
++
++    using Memory::write;
++    using Memory::read;
++
++    virtual Memory::MAU * getStoragePointer();
++    virtual void setStoragePointer(char *p_storage);
++
++    virtual void fillWithZeros();
++
++private:
++    /// Copying not allowed.
++    IdealSRAM_DF(const IdealSRAM_DF&);
++    /// Assignment not allowed.
++    IdealSRAM_DF& operator=(const IdealSRAM_DF&);
++
++    /// Starting point of the address space.
++    Word start_;
++    /// End point of the address space.
++    Word end_;
++    /// Size of the minimum adressable unit.
++    Word MAUSize_;
++    /// Container for holding read/write requests.
++    Memory::MAU* data_;
++};
++
++#endif
+diff --git a/tce/src/base/memory/Makefile.am b/tce/src/base/memory/Makefile.am
+index 72e40c0..b3e0809 100644
+--- a/tce/src/base/memory/Makefile.am
++++ b/tce/src/base/memory/Makefile.am
+@@ -1,6 +1,6 @@
+ 
+ noinst_LTLIBRARIES = libmemory.la
+-libmemory_la_SOURCES = Memory.cc IdealSRAM.cc DirectAccessMemory.cc \
++libmemory_la_SOURCES = Memory.cc IdealSRAM.cc  IdealSRAM_DF.cc DirectAccessMemory.cc \
+                        WriteRequest.cc RemoteMemory.cc
+ 
+ PROJECT_ROOT = $(top_srcdir)
+@@ -11,7 +11,7 @@ AM_CPPFLAGS = -I${PROJECT_ROOT}/src/tools \
+               -I${PROJECT_ROOT}/src/base/mach
+ AM_CXXFLAGS = -UNDEBUG
+ 
+-include_HEADERS = Memory.hh Memory.icc WriteRequest.hh DirectAccessMemory.hh
++include_HEADERS = IdealSRAM_DF.hh Memory.hh Memory.icc WriteRequest.hh DirectAccessMemory.hh
+ 
+ dist-hook:
+ 	rm -rf $(distdir)/CVS $(distdir)/.deps $(distdir)/Makefile
+@@ -28,5 +28,6 @@ libmemory_la_SOURCES += \
+ 	Memory.hh DirectAccessMemory.hh \
+ 	IdealSRAM.hh MemoryContents.hh \
+ 	WriteRequest.hh Memory.icc \
+-	TargetMemory.icc RemoteMemory.hh
++	TargetMemory.icc RemoteMemory.hh \
++	IdealSRAM_DF.hh
+ ## headers end
+diff --git a/tce/src/base/memory/Memory.cc b/tce/src/base/memory/Memory.cc
+index c9c959c..68170f7 100644
+--- a/tce/src/base/memory/Memory.cc
++++ b/tce/src/base/memory/Memory.cc
+@@ -853,3 +853,8 @@ Memory::checkRange(Word startAddress, int numberOfMAUs) {
+              % startAddress % numberOfMAUs).str());
+     }
+ }
++
++void
++Memory::setStoragePointer(char *p_storage){
++	    abortWithError("Must be implemented in the derived class.");	
++}
+diff --git a/tce/src/base/memory/Memory.hh b/tce/src/base/memory/Memory.hh
+index a1b5cfc..7b76b3c 100644
+--- a/tce/src/base/memory/Memory.hh
++++ b/tce/src/base/memory/Memory.hh
+@@ -108,6 +108,9 @@ public:
+     virtual void readLE(Word address, FloatWord& data);
+     virtual void readLE(Word address, DoubleWord& data);
+ 
++    virtual Memory::MAU * getStoragePointer(){ return 0;}
++    virtual void setStoragePointer(char *p_storage);
++
+     virtual void reset();
+     virtual void fillWithZeros();
+ 

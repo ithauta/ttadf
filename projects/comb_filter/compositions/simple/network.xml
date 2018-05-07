@@ -1,0 +1,48 @@
+<network name="simple">
+
+        <actor id="actor_readsample_0">
+            <name>readSample</name>
+            <mainSourceFile>actor_src/readsample.c</mainSourceFile>
+            <generic label="INPUTFILE_L">"left_channel_in.in"</generic>
+            <generic label="INPUTFILE_R">"right_channel_in.in"</generic>
+            <output port="o_port_0"/>
+
+            <stopNetwork>1</stopNetwork>
+        </actor>
+
+        <actor id="actor_combfilter_0">
+            <name>combfilter</name>
+            <mainSourceFile>actor_src/combfilter.c</mainSourceFile>
+            <generic label="A48">3</generic>
+            <generic label="B0">5</generic>
+            <generic label="B48">-5</generic>
+            <generic label="DELAYLINELEN">9</generic>
+            <input port="i_port_0"/>
+            <output port="o_port_0"/>
+        </actor>
+
+        <actor id="actor_writesample_0">
+            <name>writeSample</name>
+            <mainSourceFile>actor_src/writesample.c</mainSourceFile>
+            <generic label="OUTPUTFILE_L">"output/left_channel_x86.out"</generic>
+            <generic label="OUTPUTFILE_R">"output/right_channel_x86.out"</generic>
+            <input port="i_port_0"/>
+        </actor>
+
+        <fifo id="fifo_0">
+            <name>fifo_0</name>
+            <tokenSizeInBytes>2</tokenSizeInBytes>
+            <capacity>18</capacity>
+            <source port="o_port_0">actor_readsample_0</source>
+            <target port="i_port_0">actor_combfilter_0</target>
+        </fifo>
+
+        <fifo id="fifo_2">
+            <name>fifo_2</name>
+            <tokenSizeInBytes>2</tokenSizeInBytes>
+            <capacity>18</capacity>
+            <source port="o_port_0">actor_combfilter_0</source>
+            <target port="i_port_0">actor_writesample_0</target>
+        </fifo>
+
+</network>
