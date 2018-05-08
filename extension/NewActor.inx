@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+	<!-- _name must have same name as .py file but capitalise it. Shows on Menu this way-->
+	<_name>NewActor</_name>
+	<!-- id should be unique. Associates entered values with this menu -->
+	<id>githubacct.uniqueid.Name_of_your_extension</id>
+	<!-- mention a dependency here and will check for existence (optional)-->
+	<dependency type="executable" location="extensions">newActor.py</dependency>
+	<dependency type="executable" location="extensions">simplestyle.py</dependency>
+
+	<!-- start notebook -->
+	<param name='active-tab' type="notebook">
+		<!-- one per page(tab) - unique names. Can discover which page in program-->
+		<page name="title" _gui-text="Actor Properties">
+		    <param name="actorName" type="string" _gui-text="Actor name">actor</param>
+		    <param name="actorId" type="string" _gui-text="Actor Id">actorId</param>
+		    <param name="sourcefile" type="string" _gui-text="Source file">actor.c</param>
+		    
+		    <param name="stopNetwork" type="boolean" _gui-text="Can actor kill network">false</param>
+		    
+		    
+		    <param name="inputPorts" type="int"   min="0"    max="1200"    _gui-text="Number of Input ports">0</param>
+			<param name="inputPortList" type="string" _gui-text="List names of input ports ">i1;i2</param>
+			<param name="outputPorts" type="int"   min="0"    max="1200"    _gui-text="Number of Output ports">0</param>
+			<param name="outputPortList" type="string" _gui-text="List names of output ports ">o1;o2</param>			
+			<_param name="help"   type="description" xml:space="preserve">------------------------------</_param>
+
+		</page>
+		<!-- next tab -->
+		<page name="Usage2" _gui-text="Help">
+			<_param name="use2" type="description" xml:space="preserve">Your help
+Put your help in here.
+Remember that if this is very long you will need to pad the other tabs so they space out properly.
+Pad them with empty lines at the bottom to squeeze parameters up to the top.
+
+			</_param>
+		</page>
+	</param>
+	<!-- classify which menu it appears under - can be new name -->
+	<effect>
+	<object-type>all</object-type>
+		<effects-menu>
+			<submenu _name="Dataflow"/> <!-- which menu under Extensions -->
+		</effects-menu>
+	</effect>
+	<!-- py file again -->
+	<script>
+		<command reldir="extensions" interpreter="python">newActor.py</command>
+	</script>
+</inkscape-extension>
